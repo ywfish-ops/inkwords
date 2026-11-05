@@ -1,0 +1,63 @@
+{
+ "id": "sample",
+ "name": "Sample 示例词库",
+ "sub": "5 个词, 覆盖五种易错类型",
+ "count": 5,
+ "cards": [
+  {
+   "key": "sample-0",
+   "en": "wrong",
+   "ipa": "/rɔ:ŋ/",
+   "zh": "错误的；不对的",
+   "ex": "I wrote the wrong answer on the test.",
+   "ex_blank": "I wrote the ____ answer on the test.",
+   "cat": "silent",
+   "def": "not correct",
+   "audio": "wrong.mp3"
+  },
+  {
+   "key": "sample-1",
+   "en": "speech",
+   "ipa": "/spi:tʃ/",
+   "zh": "演讲；说话的能力",
+   "ex": "She practised her speech in front of the mirror.",
+   "ex_blank": "She practised her ____ in front of the mirror.",
+   "cat": "vowel_team",
+   "def": "a talk given to a group of people",
+   "audio": "speech.mp3"
+  },
+  {
+   "key": "sample-2",
+   "en": "dilemma",
+   "ipa": "/dɪˈlemə/",
+   "zh": "两难的处境",
+   "ex": "Choosing between the two clubs was a real dilemma.",
+   "ex_blank": "Choosing between the two clubs was a real ____.",
+   "cat": "double",
+   "def": "a hard choice between two options",
+   "audio": "dilemma.mp3"
+  },
+  {
+   "key": "sample-3",
+   "en": "interact",
+   "ipa": "/ˌɪntərˈækt/",
+   "zh": "互动；相互作用",
+   "ex": "Students interact with each other in group projects.",
+   "ex_blank": "Students ____ with each other in group projects.",
+   "cat": "schwa",
+   "def": "to talk or work with other people",
+   "audio": "interact.mp3"
+  },
+  {
+   "key": "sample-4",
+   "en": "wonderful",
+   "ipa": "/ˈwʌndərfəl/",
+   "zh": "极好的；精彩的",
+   "ex": "We had a wonderful time at the beach.",
+   "ex_blank": "We had a ____ time at the beach.",
+   "cat": "ending",
+   "def": "very good; amazing",
+   "audio": "wonderful.mp3"
+  }
+ ]
+}

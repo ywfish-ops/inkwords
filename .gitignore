@@ -1,0 +1,10 @@
+.pio
+.vscode
+*.bin
+*.zip
+*.tar.gz
+sdcard_dist/
+xiaozhi/
+.DS_Store
+tools/fonts/*.ttf
+tools/fonts/*.otf

@@ -1,0 +1,9 @@
+[
+  {
+    "id": "sample",
+    "name": "Sample 示例词库",
+    "sub": "5 个词, 覆盖五种易错类型",
+    "count": 5,
+    "file": "sample.json"
+  }
+]
