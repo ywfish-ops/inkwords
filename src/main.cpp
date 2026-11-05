@@ -470,6 +470,8 @@ static void applyMenuSettings() {
     }
 }
 
+static void checkDayChange();
+
 static void handleMenuEvent(input_event_t evt) {
     if (evt == EVT_BOOT_CLICK) {
         speakCurrentWord();
@@ -489,6 +491,17 @@ static void handleMenuEvent(input_event_t evt) {
             applyMenuSettings();
             updateDisplay(true);  // 退出菜单时全刷, 兼作手动清除残影
             break;
+        case MENU_ACT_TIME_SET: {
+            const LocalDateTime& t = s_menu.time();
+            if (rtc_write(t)) {
+                LOGI("RTC", "手动设时间 %04d-%02d-%02d %02d:%02d", t.year, t.month, t.day, t.hour, t.minute);
+            } else {
+                LOGE("RTC", "手动设时间写入失败");
+            }
+            checkDayChange();  // 跨天则换队列; 同时刷新 RTC 有效标记 (底部对时提示)
+            updateDisplay(false);
+            break;
+        }
         default:
             break;
     }
@@ -675,13 +688,16 @@ void loop() {
                 speakCurrentWord();
                 break;
 
-            case EVT_BOOT_LONG_PRESS:
+            case EVT_BOOT_LONG_PRESS: {
                 Serial.println("[EVENT] 长按 BOOT 键 -> 打开设置");
-                s_menu.open(s_settings, s_decks, s_deck_count);
+                LocalDateTime now;
+                bool clock_ok = rtc_read(now);
+                s_menu.open(s_settings, s_decks, s_deck_count, clock_ok ? &now : nullptr);
                 s_menu_return_state = s_view_state;
                 s_view_state = VIEW_MENU_MODAL;
                 updateDisplay(false);
                 break;
+            }
 
             default:
                 break;

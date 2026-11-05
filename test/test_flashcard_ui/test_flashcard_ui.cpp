@@ -286,6 +286,34 @@ void test_menu_renders_distinct_states() {
     TEST_ASSERT_TRUE(memcmp(first, s_buf, EPD_BUFFER_SIZE) != 0);
 }
 
+// 菜单日期时间行: 编辑时当前字段加框, 换字段画面不同; 时钟无效时显示「未设置」
+void test_menu_datetime_row() {
+    static const LocalDateTime now = {2026, 11, 5, 16, 40, 0};
+    SettingsMenu m;
+    m.open(menuDefaults(), nullptr, 0, nullptr);
+    s_ui.renderMenu(m);
+    static uint8_t unset[EPD_BUFFER_SIZE];
+    memcpy(unset, s_buf, EPD_BUFFER_SIZE);
+
+    m.open(menuDefaults(), nullptr, 0, &now);
+    s_canvas.clear(true);
+    s_ui.renderMenu(m);
+    TEST_ASSERT_TRUE(memcmp(unset, s_buf, EPD_BUFFER_SIZE) != 0);
+
+    while (m.cursor() != MENU_DATETIME) m.handle(EVT_DIAL_DOWN);
+    m.handle(EVT_DIAL_CONFIRM);  // 编辑年
+    s_canvas.clear(true);
+    s_ui.renderMenu(m);
+    static uint8_t year[EPD_BUFFER_SIZE];
+    memcpy(year, s_buf, EPD_BUFFER_SIZE);
+    m.handle(EVT_DIAL_CONFIRM);  // 编辑月
+    s_canvas.clear(true);
+    s_ui.renderMenu(m);
+    TEST_ASSERT_TRUE(memcmp(year, s_buf, EPD_BUFFER_SIZE) != 0);
+    // 七行都在提示文字 (y=718) 之上
+    TEST_ASSERT_TRUE(rowsAreWhite(700, 716, 0, 16));
+}
+
 // 音量条随音量变化
 void test_menu_volume_bar_tracks_volume() {
     SettingsMenu m;
@@ -432,6 +460,7 @@ int main() {
     RUN_TEST(test_buttons_are_outlined_not_solid);
     RUN_TEST(test_menu_renders_distinct_states);
     RUN_TEST(test_menu_volume_bar_tracks_volume);
+    RUN_TEST(test_menu_datetime_row);
     RUN_TEST(test_front_zh_to_en_hides_english);
     RUN_TEST(test_power_off_screen);
     RUN_TEST(test_clock_warning_changes_footer);

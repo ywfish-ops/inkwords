@@ -289,7 +289,7 @@ void FlashcardUI::renderBack(const WordCard& card, const CardProgress& prog, int
 }
 
 void FlashcardUI::drawFooter(int y, const char* normal) {
-    _canvas.drawStringCentered(y, _clock_warning ? "时钟未校准 · 请连电脑对时" : normal, Font20, true);
+    _canvas.drawStringCentered(y, _clock_warning ? "时钟未校准 · 请在设置里设时间" : normal, Font20, true);
 }
 
 void FlashcardUI::renderDone(int total_cards, const int box_counts[6], int tomorrow_due, int tomorrow_new) {
@@ -374,7 +374,7 @@ void FlashcardUI::renderMenu(const SettingsMenu& menu) {
     _canvas.drawFastHLine(40, 130, UI_WIDTH - 80, true);
 
     const int row_y0 = 160;
-    const int row_h = 84;
+    const int row_h = 76;
     const int label_x = 44;
     const int value_right = UI_WIDTH - 44;
 
@@ -382,8 +382,9 @@ void FlashcardUI::renderMenu(const SettingsMenu& menu) {
         int ry = row_y0 + i * row_h;
         int ty = ry + (row_h - 24) / 2;  // Font24 行内垂直居中
         if (i == menu.cursor()) {
-            // 选中行: 线框; 正在调音量时加粗
-            drawOutlineButton(20, ry + 8, UI_WIDTH - 40, row_h - 16, 14, menu.editingVolume() ? 4 : 2);
+            // 选中行: 线框; 正在调音量 / 日期时间时加粗
+            bool editing = menu.editingVolume() || menu.editingTime();
+            drawOutlineButton(20, ry + 8, UI_WIDTH - 40, row_h - 16, 14, editing ? 4 : 2);
         }
 
         char value[16];
@@ -420,15 +421,56 @@ void FlashcardUI::renderMenu(const SettingsMenu& menu) {
                 _canvas.drawString(value_right - _canvas.measureStringWidth(on, Font24), ty, on, Font24, true);
                 break;
             }
+            case MENU_DATETIME:
+                _canvas.drawString(label_x, ty, "日期时间", Font24, true);
+                drawDateTimeValue(menu, value_right, ty);
+                break;
             default:
                 _canvas.drawString(label_x, ty, "保存并退出", Font24, true);
                 break;
         }
     }
 
-    const char* hint = menu.editingVolume() ? "▲ 上拨 加大 · ▼ 下拨 减小 · 中键 完成"
-                                            : "▲▼ 选择 · 中键 确认 · 长按 BOOT 退出";
+    const char* hint = "▲▼ 选择 · 中键 确认 · 长按 BOOT 退出";
+    if (menu.editingVolume()) hint = "▲ 上拨 加大 · ▼ 下拨 减小 · 中键 完成";
+    else if (menu.editingTime())
+        hint = menu.timeField() == TIME_FIELD_MINUTE ? "▲▼ 调整 · 中键 保存 · 长按 BOOT 放弃"
+                                                     : "▲▼ 调整 · 中键 下一项 · 长按 BOOT 放弃";
     _canvas.drawStringCentered(718, hint, Font20, true);
+}
+
+// 日期时间行的值 (右对齐): "2026-11-05 16:40"; 编辑时给当前字段加框, 时钟无效且未编辑时显示「未设置」
+void FlashcardUI::drawDateTimeValue(const SettingsMenu& menu, int right, int y) {
+    if (!menu.timeValid() && !menu.editingTime()) {
+        _canvas.drawString(right - _canvas.measureStringWidth("未设置", Font24), y, "未设置", Font24, true);
+        return;
+    }
+    const LocalDateTime& t = menu.time();
+    char parts[5][8];
+    snprintf(parts[0], sizeof(parts[0]), "%04d", t.year);
+    snprintf(parts[1], sizeof(parts[1]), "%02d", t.month);
+    snprintf(parts[2], sizeof(parts[2]), "%02d", t.day);
+    snprintf(parts[3], sizeof(parts[3]), "%02d", t.hour);
+    snprintf(parts[4], sizeof(parts[4]), "%02d", t.minute);
+    static const char* SEPS[4] = {"-", "-", " ", ":"};
+    const int gap = 6;  // 分隔符两侧留白, 编辑框不压到相邻字符
+
+    int total = 0;
+    for (int i = 0; i < 5; i++) {
+        total += _canvas.measureStringWidth(parts[i], Font24);
+        if (i < 4) total += _canvas.measureStringWidth(SEPS[i], Font24) + 2 * gap;
+    }
+    int x = right - total;
+    for (int i = 0; i < 5; i++) {
+        int w = _canvas.measureStringWidth(parts[i], Font24);
+        _canvas.drawString(x, y, parts[i], Font24, true);
+        if (menu.editingTime() && i == menu.timeField()) {
+            _canvas.drawRect(x - 3, y - 3, w + 6, Font24.height + 6, true);
+            _canvas.drawRect(x - 2, y - 2, w + 4, Font24.height + 4, true);
+        }
+        x += w;
+        if (i < 4) x += _canvas.drawString(x + gap, y, SEPS[i], Font24, true) + 2 * gap;
+    }
 }
 
 // 以 (cx, cy) 为中心旋转的圆角卡片: 白底 + 2px 边框 (圆角每角用 4 点近似)

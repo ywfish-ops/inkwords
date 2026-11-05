@@ -38,7 +38,7 @@ public:
     // 渲染今日完成页: 盒子分布, 以及明天到期的复习卡数 / 可学的新词数
     void renderDone(int total_cards, const int box_counts[6], int tomorrow_due, int tomorrow_new);
 
-    // RTC 未对时: 页面底部提示连电脑对时
+    // RTC 未对时: 页面底部提示在设置里设时间
     void setClockWarning(bool on) { _clock_warning = on; }
 
     // 渲染设置菜单 (音量 / 背卡方向 / 切卡自动发音 / 退出)
@@ -67,6 +67,7 @@ private:
     void drawSpeakerIcon(int x, int y);
     void drawOutlineButton(int x, int y, int w, int h, int r, int thickness);
     void drawVolumeBar(int x, int y, int volume);
+    void drawDateTimeValue(const SettingsMenu& menu, int right, int y);
     void drawHeadline(const char* text, int y, bool large = false);
     void drawTiltedCard(int cx, int cy, int w, int h, float degrees);
 };
