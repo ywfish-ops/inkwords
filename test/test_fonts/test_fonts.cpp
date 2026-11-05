@@ -40,15 +40,18 @@ void test_descenders_not_clipped() {
     }
 }
 
-// 非 ASCII 字形不得出现完全相同的点阵 (相同通常意味着字体缺字, 渲染成了同一个方框)
+static bool isHanzi(uint32_t u) { return u >= 0x4E00 && u <= 0x9FFF; }
+
+// 汉字不得出现完全相同的点阵 (相同意味着字体缺字, 渲染成了同一个方框)
+// 符号里有本来就同形的 (如 ¯ 与 ˉ), 不在检查范围
 void test_no_duplicate_tofu_glyphs() {
     for (const FontDef* f : FONTS) {
         for (int i = 0; i < f->glyph_count; i++) {
             const GlyphInfo* a = &f->glyphs[i];
-            if (a->unicode < 0x80 || isBlank(a)) continue;
+            if (!isHanzi(a->unicode) || isBlank(a)) continue;
             for (int j = i + 1; j < f->glyph_count; j++) {
                 const GlyphInfo* b = &f->glyphs[j];
-                if (b->unicode < 0x80 || a->width != b->width || a->height != b->height) continue;
+                if (!isHanzi(b->unicode) || a->width != b->width || a->height != b->height) continue;
                 if (memcmp(a->bitmap, b->bitmap, bitmapBytes(a)) == 0) {
                     char msg[64];
                     snprintf(msg, sizeof(msg), "Font%d: U+%04lX == U+%04lX", f->height,
@@ -90,6 +93,37 @@ void test_font48_has_error_titles() {
     }
 }
 
+static int hanziCount(const FontDef& f) {
+    int n = 0;
+    for (int i = 0; i < f.glyph_count; i++) n += isHanzi(f.glyphs[i].unicode);
+    return n;
+}
+
+// 内置 GB2312 全部 6763 个汉字 (首字「啊」末字「齄」): 换任意中文释义词库都不缺字
+void test_builtin_gb2312_hanzi() {
+    const FontDef* fonts[] = {&Font16, &Font24, &Font48};
+    for (const FontDef* f : fonts) {
+        TEST_ASSERT_TRUE(hanziCount(*f) >= 6763);
+        TEST_ASSERT_NOT_NULL(font_find_glyph(*f, 0x554A));  // 啊
+        TEST_ASSERT_NOT_NULL(font_find_glyph(*f, 0x9F44));  // 齄
+        TEST_ASSERT_NOT_NULL(font_find_glyph(*f, 0x3002));  // 。
+    }
+}
+
+// 内置带重音拉丁字母与音标
+void test_builtin_latin_and_ipa() {
+    const uint32_t latin[] = {0xE9, 0xEF, 0xE7, 0xC6, 0x153};  // é ï ç Æ œ
+    for (uint32_t c : latin) {
+        TEST_ASSERT_NOT_NULL(font_find_glyph(Font24, c));
+        TEST_ASSERT_NOT_NULL(font_find_glyph(Font64, c));
+    }
+    const uint32_t ipa[] = {0x259, 0x283, 0x28A, 0x2C8, 0x2D0};  // ə ʃ ʊ ˈ ː
+    for (uint32_t c : ipa) {
+        TEST_ASSERT_NOT_NULL(font_find_glyph(Font24, c));
+        TEST_ASSERT_NOT_NULL(font_find_glyph(Font32, c));
+    }
+}
+
 int main() {
     UNITY_BEGIN();
     RUN_TEST(test_descenders_not_clipped);
@@ -97,5 +131,7 @@ int main() {
     RUN_TEST(test_middle_dot_is_narrow);
     RUN_TEST(test_font48_has_chinese_meaning_glyphs);
     RUN_TEST(test_font48_has_error_titles);
+    RUN_TEST(test_builtin_gb2312_hanzi);
+    RUN_TEST(test_builtin_latin_and_ipa);
     return UNITY_END();
 }

@@ -1,6 +1,8 @@
-# epaper-word-cards · 墨水屏背单词卡
+# 墨词 InkWords
 
 一台只能背单词的小机器：微雪 ESP32-S3 3.97 寸墨水屏开发板 + TF 卡词库 + 发音，按 Leitner 间隔复习自动安排每天要背的词。没网、没游戏、没推送，全程离线。
+
+词库不限：课本单词、KET / PET、拼字比赛词表……只要是「英语单词 + 中文释义」，按下面的格式写好拷进 TF 卡就能背，**不用重新烧录**。
 
 这个项目的代码全部由 AI 编程工具（主要是 Claude Code）编写，作者负责提需求、上板测试和拍照验收。
 
@@ -12,7 +14,8 @@
 - 两个背卡方向：英 → 中，中 → 英（听发音想拼写）
 - 发音：每个词一个 MP3，存在 TF 卡里；可设置切卡自动念
 - Leitner 5 盒间隔复习：记住了升一盒，没记住回盒 1，下次到期 = 今天 + [0, 1, 2, 4, 7, 14] 天（按盒）
-- 每日新词上限、多套词库切换、按易错类型筛选（在 `userdata/settings.json` 里设置）
+- 任意词库：固件内置全部 6763 个常用汉字（GB2312）、带重音的拉丁字母和 IPA 音标，换词库只需换 TF 卡上的文件
+- 每日新词上限、多套词库切换、按标签筛选（在 `userdata/settings.json` 里设置）
 - 学习进度存在 TF 卡上，拔卡换机也不丢
 - 电池供电时 MCU 自动浅睡眠；长按电源键关机，墨水屏停在关机画面
 
@@ -22,7 +25,7 @@
 |------|------|
 | 开发板 | [微雪 ESP32-S3-ePaper-3.97](https://www.waveshare.net/shop/ESP32-S3-ePaper-3.97.htm)：ESP32-S3R8（16MB Flash / 8MB PSRAM），3.97 寸 800×480 墨水屏，三向拨轮，喇叭，TF 卡槽，RTC，电源管理芯片 |
 | 电池 | 板子配套的锂电池接口（作者用 1500mAh） |
-| TF 卡 | 8G～32G 即可，格式化为 **FAT32**；词库加发音只有十几 MB |
+| TF 卡 | 8G～32G 即可，格式化为 **FAT32**；几百个词的词库加发音也只有十几 MB |
 | 数据线 | 能传数据的 USB-C 线（只能充电的线电脑认不出板子） |
 
 ### 外壳
@@ -111,18 +114,27 @@
 }
 ```
 
-- `key`（全局唯一，进度按它记录）和 `en` 必填，其余字段可以省略。
-- `cat` 是易错类型标签，显示在卡片左上角，可在 `userdata/settings.json` 的 `cat` 里按它筛选；示例用的是 `silent` / `vowel_team` / `double` / `schwa` / `ending`。
-- MP3 建议 24kHz 单声道，每个词念一遍。
+| 字段 | 必填 | 说明 |
+|------|------|------|
+| `key` | ✅ | 每张卡的唯一编号，进度按它记录；换词库时不要重复 |
+| `en` | ✅ | 英文单词 |
+| `ipa` | | 音标 |
+| `zh` | | 中文释义（中 → 英方向的正面就显示它） |
+| `def` | | 英文释义 |
+| `ex` | | 例句 |
+| `ex_blank` | | 把单词换成 `____` 的例句 |
+| `cat` | | 标签，显示在卡片左上角，任意填，如 `Unit 3`、`易错`；可在 `userdata/settings.json` 的 `cat` 里按它筛选 |
+| `audio` | | 发音文件名（在 `audio/` 下）；没有就不念，其他功能照常 |
 
-### 用自己的词库
+MP3 建议 24kHz 单声道、每个词念一遍。
 
-把自己的词库放到 `sdcard_dist/spell/`（与上面同样的结构，此目录不入库），然后重新生成字库再烧录。点阵字库只收录用到的字，新词库里的中文、音标要靠这一步加进去：
+### 换成自己的词库
 
-```bash
-python3 tools/generate_fonts.py   # 先按 tools/fonts/README.md 下载两个开源字体
-pio run -t upload
-```
+1. 照上面的格式写一个 `<id>.json`，在 `manifest.json` 里加一行登记（可以让 AI 帮你把表格转成这个格式）。
+2. 有发音就把 MP3 放进 `audio/`，没有也行。
+3. 拷进 TF 卡的 `spell/` 目录，开机后长按 BOOT 在设置里选词库。
+
+固件已内置全部常用汉字，**不用重新生成字库、也不用重新烧录**。只有用到 GB2312 以外的生僻字时，才需要把词库放到 `sdcard_dist/spell/` 后运行 `python3 tools/generate_fonts.py`（先按 `tools/fonts/README.md` 下载字体）再烧录。
 
 ## 工具
 
@@ -131,7 +143,8 @@ pio run -t upload
 | `python3 tools/sdsync.py ls / get / put / push / rm` | 不拔卡，通过 USB 串口读写 TF 卡 |
 | `python3 tools/sdsync.py log` | 查看设备日志 |
 | `python3 tools/sdsync.py time` | 用电脑时间给板子对时（每次连接也会自动对时） |
-| `python3 tools/generate_fonts.py` | 从源码和词库生成点阵字库 `src/ui/font_data.cpp` |
+| `python3 tools/generate_fonts.py` | 生成点阵字库 `src/ui/font_data.cpp`（内置字符集 + 源码与词库里的字） |
+| `python3 tools/prepare_sdcard.py` | 示例导入脚本：把作者自己的 HTML 词表源文件转成 TF 卡格式，可参考改写 |
 | `pio test -e native` | 在电脑上跑单元测试（不需要板子） |
 
 `sdsync.py` 需要 `pip install pyserial`；`generate_fonts.py` 需要 `pip install pillow`。
@@ -159,7 +172,7 @@ MANUAL.md       详细设计文档
 
 ## English summary
 
-A single-purpose flashcard device for spelling-bee vocabulary, built on the Waveshare ESP32-S3-ePaper-3.97 board (3.97" 800×480 e-paper, ESP32-S3, TF card, speaker). Word lists and per-word MP3 pronunciations live on a FAT32 TF card; reviews are scheduled with a 5-box Leitner system and progress is saved back to the card. Fully offline.
+InkWords (墨词) is a single-purpose flashcard device for English vocabulary with Chinese meanings, built on the Waveshare ESP32-S3-ePaper-3.97 board (3.97" 800×480 e-paper, ESP32-S3, TF card, speaker). Any word list works: decks and optional per-word MP3 pronunciations live on a FAT32 TF card, and the firmware has all 6763 GB2312 hanzi, accented Latin letters and IPA built in, so changing decks never needs a reflash. Reviews are scheduled with a 5-box Leitner system and progress is saved back to the card. Fully offline.
 
 - Build & flash with PlatformIO: `pio run -t upload` (serial port auto-detected).
 - Copy `sample_sdcard/spell` to the root of a FAT32 TF card to try the 5-word sample deck.

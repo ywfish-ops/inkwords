@@ -7,7 +7,7 @@
 /**
  * @file font_data.h
  * @brief 墨水屏 1-bit 点阵字体定义 (Font16, Font20, Font24, Font32, Font48, Font64)
- *        支持完整 ASCII, 国际音标 IPA, 以及 SPBCN 词库与 UI 中文
+ *        内置 GB2312 全部 6763 个汉字、中文标点、带重音拉丁字母与 IPA 音标, 外加词库与 UI 用到的字
  */
 
 struct GlyphInfo {
@@ -27,8 +27,8 @@ struct FontDef {
 extern const FontDef Font16;
 extern const FontDef Font24;
 extern const FontDef Font48;
-extern const FontDef Font64;  // 仅 ASCII
-extern const FontDef Font32;  // 仅 ASCII + 词库音标
+extern const FontDef Font64;  // 拉丁字母 (含重音), 无汉字
+extern const FontDef Font32;  // 拉丁字母 + 音标, 无汉字
 extern const FontDef Font20;  // 仅 ASCII + UI 文案
 
 // 高效二分查找字符点阵

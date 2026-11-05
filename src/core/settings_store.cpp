@@ -6,7 +6,6 @@ static const char* NVS_NAMESPACE = "spell";
 
 void settings_load(UserSettings& settings) {
     memset(&settings, 0, sizeof(settings));
-    strncpy(settings.deck_id, "spbcn_r1", sizeof(settings.deck_id) - 1);
     strncpy(settings.cat_filter, "all", sizeof(settings.cat_filter) - 1);
 
     Preferences prefs;

@@ -42,6 +42,36 @@ def collect_deck_field(field):
     return chars
 
 
+def gb2312_hanzi():
+    """GB2312 一、二级汉字, 共 6763 个: 换任意中文释义词库都不用重新生成字库"""
+    chars = []
+    for hi in range(0xB0, 0xF8):
+        for lo in range(0xA1, 0xFF):
+            try:
+                chars.append(bytes([hi, lo]).decode("gb2312"))
+            except UnicodeDecodeError:
+                pass  # D7FA..D7FE 为空位
+    return chars
+
+def gb2312_symbols():
+    """GB2312 第 1~3 区: 中文标点、常用符号、全角 ASCII"""
+    chars = []
+    for hi in range(0xA1, 0xA4):
+        for lo in range(0xA1, 0xFF):
+            try:
+                chars.append(bytes([hi, lo]).decode("gb2312"))
+            except UnicodeDecodeError:
+                pass
+    return chars
+
+def latin_extra():
+    """带重音的拉丁字母 (café, naïve, Æ ...): Latin-1 补充 + 拉丁扩展 A"""
+    return [chr(c) for c in range(0xA0, 0x180)]
+
+def ipa_chars():
+    """IPA 音标与修饰符号"""
+    return [chr(c) for c in range(0x250, 0x300)]
+
 def collect_characters():
     chars = set(collect_ui_characters())
 
@@ -116,11 +146,26 @@ def widen_thin_stems(img):
                 dst[x + 1, y] = 1
     return out
 
+def pick_font(ch, zh_font, en_font):
+    # 中文、全角标点与特殊符号用中文字体; 间隔号 · (U+00B7) 走英文字体, 保持窄字符
+    return zh_font if (ord(ch) >= 0x2000 or ch in "▲▼●■□◆★☆") else en_font
+
+_NOTDEF = {}
+
+def has_glyph(ch, zh_font, en_font):
+    """字体里没有的字会画成同一个 .notdef 方框; 与一个必定缺失的码位比对"""
+    font = pick_font(ch, zh_font, en_font)
+    if ch == " " or ord(ch) < 0x80:
+        return True
+    key = id(font)
+    if key not in _NOTDEF:
+        _NOTDEF[key] = bytes(font.getmask("\U0010FFFD"))
+    return bytes(font.getmask(ch)) != _NOTDEF[key]
+
 def render_glyph(ch, font_size, zh_font, en_font):
     code = ord(ch)
-    # Choose font: use Chinese font for CJK, full-width punctuation, and special symbols
-    # 间隔号 · (U+00B7) 走英文字体, 保持窄字符; emoji 两套字体都没有, 不要放进 UI 文案
-    font = zh_font if (code >= 0x2000 or ch in "▲▼●■□◆★☆") else en_font
+    # emoji 两套字体都没有, 不要放进 UI 文案
+    font = pick_font(ch, zh_font, en_font)
 
     # Calculate dimensions
     # For space
@@ -198,25 +243,20 @@ def generate_font(font_name, font_size, char_list):
     en_font = ImageFont.truetype(EN_FONT_PATH, font_size)
 
     glyphs = []
+    skipped = []
     for ch in char_list:
+        if not has_glyph(ch, zh_font, en_font):
+            skipped.append(ch)
+            continue
         g = render_glyph(ch, font_size, zh_font, en_font)
         if g:
             glyphs.append(g)
+    if skipped:
+        print(f"  {font_name}: {len(skipped)} chars not in the fonts, skipped: {''.join(skipped[:40])}")
 
     # Sort glyphs by unicode
     glyphs.sort(key=lambda x: x["unicode"])
 
-    # A font without the character renders the same .notdef box for all of them;
-    # identical non-blank, non-ASCII bitmaps therefore mean missing glyphs.
-    seen = {}
-    for g in glyphs:
-        if g["unicode"] < 0x80 or not any(g["bitmap"]):
-            continue
-        key = (g["width"], g["height"], tuple(g["bitmap"]))
-        seen.setdefault(key, []).append(chr(g["unicode"]))
-    tofu = [chars for chars in seen.values() if len(chars) > 1]
-    if tofu:
-        sys.exit(f"{font_name}: characters missing from the fonts (rendered as tofu): {tofu}")
     print(f"  {font_name}: {len(glyphs)} glyphs generated.")
     return glyphs
 
@@ -228,23 +268,26 @@ def main():
     # ASCII subset (32..126)
     ascii_chars = [chr(c) for c in range(32, 127)]
 
-    # Font 16: ALL characters (all decks + UI + all code strings)
-    chars_16 = all_chars
+    # 内置字符集, 与具体词库无关: 常用汉字 + 中文符号 + 带重音拉丁字母 + 音标
+    builtin = gb2312_hanzi() + gb2312_symbols() + latin_extra() + ipa_chars()
 
-    # Font 24: ALL characters (all decks + UI + all code strings)
-    chars_24 = all_chars
+    # Font 16/24: 全部 (内置 + 词库 + UI + 源码)
+    chars_16 = sorted(set(all_chars + builtin))
+    chars_24 = chars_16
 
-    # Font 48: ASCII + titles + every deck's Chinese meanings (zh->en card front)
-    chars_48 = sorted(set(ascii_chars + list("恭喜！今日复习完成设置已关机未检测到卡词库读取失败") +
+    # Font 48: 中→英正面的大字中文释义 + 标题
+    chars_48 = sorted(set(ascii_chars + gb2312_hanzi() + gb2312_symbols() + latin_extra() +
+                          list("恭喜！今日复习完成设置已关机未检测到卡词库读取失败") +
                           [c for c in collect_deck_field("zh") if ord(c) >= 32]))
 
     f16_glyphs = generate_font("Font16", 16, chars_16)
     f24_glyphs = generate_font("Font24", 24, chars_24)
     f48_glyphs = generate_font("Font48", 48, chars_48)
-    # Font 64: ASCII only (en->zh card front headword)
-    f64_glyphs = generate_font("Font64", 64, ascii_chars)
-    # Font 32: ASCII + every deck's IPA symbols (en->zh card front phonetic)
-    chars_32 = sorted(set(ascii_chars + [c for c in collect_deck_field("ipa") if ord(c) >= 32]))
+    # Font 64: 英→中正面的大字单词 (ASCII + 带重音拉丁字母)
+    f64_glyphs = generate_font("Font64", 64, sorted(set(ascii_chars + latin_extra())))
+    # Font 32: 英→中正面的音标
+    chars_32 = sorted(set(ascii_chars + latin_extra() + ipa_chars() +
+                          [c for c in collect_deck_field("ipa") if ord(c) >= 32]))
     f32_glyphs = generate_font("Font32", 32, chars_32)
     # Font 20: ASCII + UI 文案 (中文小字从 16px 放大到 20px, 笔画更均匀)
     chars_20 = sorted(set(ascii_chars + collect_ui_characters()))
@@ -262,7 +305,7 @@ def main():
 /**
  * @file font_data.h
  * @brief 墨水屏 1-bit 点阵字体定义 (Font16, Font20, Font24, Font32, Font48, Font64)
- *        支持完整 ASCII, 国际音标 IPA, 以及 SPBCN 词库与 UI 中文
+ *        内置 GB2312 全部 6763 个汉字、中文标点、带重音拉丁字母与 IPA 音标, 外加词库与 UI 用到的字
  */
 
 struct GlyphInfo {
@@ -282,8 +325,8 @@ struct FontDef {
 extern const FontDef Font16;
 extern const FontDef Font24;
 extern const FontDef Font48;
-extern const FontDef Font64;  // 仅 ASCII
-extern const FontDef Font32;  // 仅 ASCII + 词库音标
+extern const FontDef Font64;  // 拉丁字母 (含重音), 无汉字
+extern const FontDef Font32;  // 拉丁字母 + 音标, 无汉字
 extern const FontDef Font20;  // 仅 ASCII + UI 文案
 
 // 高效二分查找字符点阵

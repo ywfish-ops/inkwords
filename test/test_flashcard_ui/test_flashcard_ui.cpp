@@ -135,9 +135,24 @@ void test_front_zh_headline_stays_font48() {
             TEST_ASSERT_EQUAL(probe.getPixel(x, y), s_canvas.getPixel(x, y));
 }
 
-// 英→中正面: 单词含 Font64 未收录的字 (é) 时整词退回 Font48, 不画出 '?'
-void test_front_word_with_non_ascii_falls_back_to_font48() {
+// 英→中正面: 带重音的单词 (é 已内置于 Font64) 照样用大字
+void test_front_accented_word_uses_font64() {
     WordCard c = makeCard("café");
+    c.ipa[0] = '\0';
+    CardProgress p = {1, 0, false};
+    s_ui.renderFront(c, p, 0, 10);
+    static uint8_t expect[EPD_BUFFER_SIZE];
+    Canvas480x800 probe(expect, 3);
+    probe.clear(true);
+    probe.drawStringCentered(230 - 8, c.en, Font64, true);
+    for (int y = 200; y < 300; y++)
+        for (int x = 34; x < UI_WIDTH - 34; x++)
+            TEST_ASSERT_EQUAL(probe.getPixel(x, y), s_canvas.getPixel(x, y));
+}
+
+// 英→中正面: 单词含 Font64 未收录的字 (汉字) 时整词退回 Font48, 不画出 '?'
+void test_front_word_with_non_latin_falls_back_to_font48() {
+    WordCard c = makeCard("tofu豆腐");
     c.ipa[0] = '\0';
     CardProgress p = {1, 0, false};
     s_ui.renderFront(c, p, 0, 10);
@@ -372,6 +387,19 @@ void test_deck_label_in_header() {
     s_ui.setDeckLabel("SPBCN");
 }
 
+// 没有词库标签时状态栏左上角不画徽章 (不再默认显示某个词库名)
+void test_header_without_deck_label_draws_no_badge() {
+    WordCard c = makeCard("word");
+    CardProgress p = {1, 0, false};
+    s_ui.setDeckLabel("");
+    s_ui.renderFront(c, p, 0, 10);
+    TEST_ASSERT_TRUE(rowsAreWhite(10, 36, 10, 120));
+    s_ui.setDeckLabel("SPBCN R1");
+    s_canvas.clear(true);
+    s_ui.renderFront(c, p, 0, 10);
+    TEST_ASSERT_FALSE(rowsAreWhite(10, 36, 10, 120));
+}
+
 // 未对时: 底部提示换成对时提示, 画面与平时不同
 void test_clock_warning_changes_footer() {
     WordCard c = makeCard("word");
@@ -395,7 +423,8 @@ int main() {
     RUN_TEST(test_front_large_word_clear_of_ipa);
     RUN_TEST(test_front_word_ipa_grouped_apart_from_button);
     RUN_TEST(test_front_zh_headline_stays_font48);
-    RUN_TEST(test_front_word_with_non_ascii_falls_back_to_font48);
+    RUN_TEST(test_front_accented_word_uses_font64);
+    RUN_TEST(test_front_word_with_non_latin_falls_back_to_font48);
     RUN_TEST(test_front_ipa_uses_large_font);
     RUN_TEST(test_front_longest_ipa_fits);
     RUN_TEST(test_unknown_battery_shows_empty_icon);
@@ -409,5 +438,6 @@ int main() {
     RUN_TEST(test_menu_deck_row_shows_label);
     RUN_TEST(test_error_screen);
     RUN_TEST(test_deck_label_in_header);
+    RUN_TEST(test_header_without_deck_label_draws_no_badge);
     return UNITY_END();
 }

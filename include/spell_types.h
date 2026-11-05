@@ -6,7 +6,7 @@
 
 /**
  * @file spell_types.h
- * @brief SPBCN 单词卡核心数据结构定义
+ * @brief 墨词 InkWords 核心数据结构定义
  */
 
 // Leitner 5盒复习间隔 (单位: 天)
@@ -71,7 +71,7 @@ struct CardProgress {
 
 // 用户全局设置: deck_id/cat_filter 来自 TF 卡 userdata/settings.json, 其余存 NVS
 struct UserSettings {
-    char         deck_id[20];   // 当前词库 ID: "spbcn_r1", "spbcn_r2", "spbcn_r3", "sample"
+    char         deck_id[20];   // 当前词库 ID, 如 "spbcn_r1"; 为空时用 manifest 里的第一套
     char         cat_filter[20];// 当前分类过滤: "all" 或具体分类名
     review_dir_t dir;           // 背卡方向: DIR_EN_TO_ZH 或 DIR_ZH_TO_EN
     bool         auto_speak;    // 切卡时是否自动播放发音 MP3

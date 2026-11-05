@@ -83,12 +83,14 @@ void FlashcardUI::setDeckLabel(const char* label) {
 }
 
 void FlashcardUI::drawHeader(const char* deck_id, int box, int card_idx, int total_cards) {
-    // 1. 词库名称 (左侧圆角胶囊徽章)
-    char deck_buf[32];
-    snprintf(deck_buf, sizeof(deck_buf), " %s ", deck_id && *deck_id ? deck_id : "SPBCN");
-    int deck_w = _canvas.measureStringWidth(deck_buf, Font16);
-    _canvas.drawRoundRect(16, 12, deck_w + 10, 22, 11, true);
-    _canvas.drawString(21, 15, deck_buf, Font16, true);
+    // 1. 词库名称 (左侧圆角胶囊徽章, 没有标签时不画)
+    if (deck_id && *deck_id) {
+        char deck_buf[32];
+        snprintf(deck_buf, sizeof(deck_buf), " %s ", deck_id);
+        int deck_w = _canvas.measureStringWidth(deck_buf, Font16);
+        _canvas.drawRoundRect(16, 12, deck_w + 10, 22, 11, true);
+        _canvas.drawString(21, 15, deck_buf, Font16, true);
+    }
 
     // 2. 居中: 卡片计数与微型 5 盒进阶分段条
     char count_buf[32];
@@ -127,7 +129,7 @@ static bool fontCovers(const char* text, const FontDef& font) {
     return true;
 }
 
-// 正面主文字: 英文单词优先 Font64 (仅 ASCII); 否则 Font48 居中, 放不下时降为 Font24, 仍放不下则折行
+// 正面主文字: 英文单词优先 Font64 (拉丁字母, 无汉字); 否则 Font48 居中, 放不下时降为 Font24, 仍放不下则折行
 void FlashcardUI::drawHeadline(const char* text, int y, bool large) {
     const int max_w = UI_WIDTH - 68;
     if (large && fontCovers(text, Font64) && _canvas.measureStringWidth(text, Font64) <= max_w) {
@@ -470,7 +472,7 @@ void FlashcardUI::renderPowerOff() {
 
     // 最上面一张: 单词卡正反两面的信息
     _canvas.drawRoundRect(top_x + 16, top_y + 14, 86, 22, 11, true);
-    _canvas.drawString(top_x + 22, top_y + 17, "# SPBCN", Font16, true);
+    _canvas.drawString(top_x + 22, top_y + 17, "# WORDS", Font16, true);
     drawMiniBoxProgress(top_x + cw - 16 - 76, top_y + 22, 3);
     _canvas.drawStringCentered(top_y + 52, "spell", Font48, true);
     _canvas.drawStringCentered(top_y + 118, "/spel/ · 拼写", Font24, true);
@@ -480,7 +482,7 @@ void FlashcardUI::renderPowerOff() {
     _canvas.drawStringCentered(490, "已关机", Font48, true);
     _canvas.drawDottedHLine(170, 560, UI_WIDTH - 340, 5, true);
     _canvas.drawStringCentered(580, "按电源键开机", Font24, true);
-    _canvas.drawStringCentered(736, "SPBCN 单词卡", Font24, true);
+    _canvas.drawStringCentered(736, "墨词 InkWords", Font24, true);
 }
 
 void FlashcardUI::renderError(const char* title, const char* detail) {

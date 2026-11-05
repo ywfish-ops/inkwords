@@ -1,6 +1,6 @@
-# AGENTS.md — SPBCN 单词卡 (ePaper 版) 多 AI 协同开发指南
+# AGENTS.md — 墨词 InkWords 多 AI 协同开发指南
 
-本项目把 SPBCN 词表、412 个发音 MP3 与双面翻转单词闪卡 + Leitner 5 盒间隔复习做到 **微雪 ESP32-S3-ePaper-3.97** 开发板。  
+本项目是通用的墨水屏单词卡：任意「英语 + 中文释义」词库、可选的发音 MP3，双面翻转闪卡 + Leitner 5 盒间隔复习，运行在 **微雪 ESP32-S3-ePaper-3.97** 开发板。作者自用的是 SPBCN 拼字词库，仓库只带 5 个词的示例 (`sample_sdcard/`)。  
 详细的架构与 UI 规范请参见同目录下的 [`PLAN.md`](PLAN.md)。
 
 ---

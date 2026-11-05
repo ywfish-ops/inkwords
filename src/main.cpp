@@ -276,7 +276,7 @@ static bool loadDeckAtBoot() {
         return false;
     }
     int idx = deck_index(s_decks, s_deck_count, s_settings.deck_id);
-    if (strcmp(s_decks[idx].id, s_settings.deck_id) != 0) {
+    if (s_settings.deck_id[0] && strcmp(s_decks[idx].id, s_settings.deck_id) != 0) {
         LOGW("DECK", "词库 %s 不在 manifest 中, 改用 %s", s_settings.deck_id, s_decks[idx].id);
     }
 
@@ -317,7 +317,7 @@ void setup() {
     delay(1000);
 
     Serial.println("\n=======================================================");
-    Serial.println("  SPBCN 单词卡 (480x800 竖屏墨水屏) 启动");
+    Serial.println("  墨词 InkWords (480x800 竖屏墨水屏) 启动");
     Serial.println("=======================================================");
 
     // 1. 初始化 AXP2101 电源芯片 (开启墨水屏与外设 3.3V 供电)

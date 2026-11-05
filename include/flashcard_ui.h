@@ -7,14 +7,14 @@
 
 /**
  * @file flashcard_ui.h
- * @brief SPBCN 单词卡 480x800 墨水屏视觉呈现组件
+ * @brief 墨词 InkWords: 480x800 墨水屏单词卡界面
  */
 
 class FlashcardUI {
 public:
     FlashcardUI(Canvas480x800& canvas)
         : _canvas(canvas), _battery_percent(100), _charging(false), _dir(DIR_EN_TO_ZH), _clock_warning(false) {
-        setDeckLabel("SPBCN");
+        setDeckLabel("");
     }
 
     // 状态栏左上角的词库标签, 如 "SPBCN R1"

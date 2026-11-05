@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
-从两份 HTML 词表源文件 (内嵌 <script id="DATA_*"> JSON, 目录由命令行传入) 提取词库 (spbcn_r1, spbcn_r2, spbcn_r3) 与 412 个发音 MP3，
-构建可直接拷入 TF 卡根目录的 sdcard_dist/spell/ 数据包。
+示例导入脚本: 作者从自己的两份 HTML 词表源文件 (内嵌 <script id="DATA_*"> JSON, 目录由命令行传入)
+提取 SPBCN 词库 (spbcn_r1, spbcn_r2, spbcn_r3) 与 412 个发音 MP3, 构建可直接拷入 TF 卡根目录的
+sdcard_dist/spell/ 数据包。别的词库来源可照此改写, 或直接按 README 的格式手写 JSON。
 """
 
 import argparse
