@@ -126,7 +126,12 @@
 | `cat` | | 标签，显示在卡片左上角，任意填，如 `Unit 3`、`易错`；可在 `userdata/settings.json` 的 `cat` 里按它筛选 |
 | `audio` | | 发音文件名（在 `audio/` 下）；没有就不念，其他功能照常 |
 
-MP3 建议 24kHz 单声道、每个词念一遍。
+MP3 必须是 **24kHz 单声道**（其他采样率会报错不念），每个词念一遍。示例词库的发音是用 [edge-tts](https://github.com/rany2/edge-tts)（微软 Edge 朗读服务，免费、不需要密钥）的 `en-US-MichelleNeural` 音色生成的，输出正好是 24kHz 单声道，可以直接用：
+
+```bash
+pip install edge-tts
+edge-tts --voice en-US-MichelleNeural --text "wonderful" --write-media wonderful.mp3
+```
 
 ### 换成自己的词库
 

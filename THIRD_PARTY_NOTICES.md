@@ -9,7 +9,7 @@
 | 微雪板级参考代码 | `docs/bsp_reference/` | [78/xiaozhi-esp32](https://github.com/78/xiaozhi-esp32)（Waveshare ESP32-S3-ePaper-3.97 板级支持） | MIT，见 `LICENSES/xiaozhi-esp32-MIT.txt` |
 | 点阵字库（英文、数字、音标） | `src/ui/font_data.cpp` | 由 [DejaVu Sans Condensed](https://github.com/dejavu-fonts/dejavu-fonts) 渲染生成 | Bitstream Vera 许可（DejaVu 改动为公有领域），见 `LICENSES/DejaVu-Fonts.txt` |
 | 点阵字库（中文与符号） | `src/ui/font_data.cpp` | 由 [Noto Sans CJK SC](https://github.com/notofonts/noto-cjk) Medium 渲染生成 | SIL Open Font License 1.1，见 `LICENSES/Noto-Sans-CJK-OFL-1.1.txt` |
-| 示例词库的发音 | `sample_sdcard/spell/audio/` | 文字转语音（TTS）生成 | — |
+| 示例词库的发音 | `sample_sdcard/spell/audio/` | 用 [edge-tts](https://github.com/rany2/edge-tts)（调用微软 Edge 朗读服务）以 `en-US-MichelleNeural` 音色生成，去掉首尾静音后重新编码 | 微软未就该服务生成的音频公布再分发条款，仅作演示用途 |
 
 说明：
 
