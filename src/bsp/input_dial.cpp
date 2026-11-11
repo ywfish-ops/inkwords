@@ -2,6 +2,8 @@
 
 static const uint32_t DEBOUNCE_DELAY_MS = 25;
 static const uint32_t LONG_PRESS_MS     = 1200;
+static const uint32_t SAMPLE_PERIOD_MS  = 2;
+static const uint32_t TASK_STACK_BYTES  = 3072;
 
 void InputDial::initButton(ButtonState& btn, int pin) {
     btn.pin = pin;
@@ -19,9 +21,21 @@ void InputDial::begin() {
     initButton(_btn_down, DIAL_DOWN_PIN);
     initButton(_btn_boot, BTN_BOOT_PIN);
     pinMode(BTN_PWR_PIN, INPUT);  // 板上已有外部电路, 不加内部上下拉
+
+    // 与 loop() 同在核心 1, 优先级高于它, 主循环刷屏等待时照样采样
+    BaseType_t ok = xTaskCreatePinnedToCore(taskEntry, "input_dial", TASK_STACK_BYTES, this, 3, nullptr, 1);
+    if (ok != pdPASS) Serial.println("[INPUT] 按键采样任务创建失败");
 }
 
-input_event_t InputDial::poll() {
+void InputDial::taskEntry(void* arg) {
+    InputDial* self = static_cast<InputDial*>(arg);
+    for (;;) {
+        self->_pending.offer(self->sample());
+        vTaskDelay(pdMS_TO_TICKS(SAMPLE_PERIOD_MS));
+    }
+}
+
+input_event_t InputDial::sample() {
     uint32_t now = millis();
     input_event_t event = EVT_NONE;
 

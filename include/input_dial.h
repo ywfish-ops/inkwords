@@ -8,10 +8,14 @@
 #include "spell_types.h"
 #include "dial_debounce.h"
 #include "power_key.h"
+#include "pending_event.h"
 
 /**
  * @file input_dial.h
  * @brief 微雪 Waveshare ESP32-S3-ePaper-3.97 三向滚轮按键与 BOOT 键轮询驱动
+ *
+ * 按键由后台任务每 2ms 采样 (刷屏时主循环被 waitBusy 卡住, 不会因此漏按), 识别出的事件放进
+ * 只容 1 个的待处理槽, 主循环用 poll() 取.
  */
 
 class InputDial {
@@ -21,11 +25,11 @@ public:
         return instance;
     }
 
-    // 初始化按键引脚 (配置内置上拉)
+    // 初始化按键引脚 (配置内置上拉) 并启动采样任务
     void begin();
 
-    // 轮询按键状态并返回当前触发的事件 (EVT_NONE 表示无按键)
-    input_event_t poll();
+    // 取出待处理的按键事件 (EVT_NONE 表示无按键)
+    input_event_t poll() { return _pending.take(); }
 
 private:
     InputDial() = default;
@@ -49,7 +53,11 @@ private:
     DialDebounce _deb_confirm;
     PowerKey     _pwr;
 
+    PendingEvent _pending;
+
     void initButton(ButtonState& btn, int pin);
+    input_event_t sample();  // 只在采样任务里调用
+    static void taskEntry(void* arg);
 };
 
 #endif // INPUT_DIAL_H
