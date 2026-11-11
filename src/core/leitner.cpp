@@ -3,30 +3,86 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
+#include <ctype.h>
 
-bool progress_parse(const char* json, size_t len, const Deck& deck, CardProgress* progress, StudyState& state) {
-    for (int i = 0; i < deck.count; i++) progress[i] = {1, 0, false};
-    state = {0, 0};
+void progress_word_key(const char* en, char* out, size_t out_len) {
+    if (out_len == 0) return;
+    while (*en == ' ') en++;
+    size_t n = strlen(en);
+    while (n > 0 && en[n - 1] == ' ') n--;
+    if (n >= out_len) n = out_len - 1;
+    for (size_t i = 0; i < n; i++) out[i] = (char)tolower((unsigned char)en[i]);
+    out[n] = '\0';
+}
+
+// 二分查找; 找不到时 *at 为应插入的位置
+static bool store_find(const ProgressStore& store, const char* key, int* at) {
+    int lo = 0, hi = store.count;
+    while (lo < hi) {
+        int mid = (lo + hi) / 2;
+        int c = strcmp(store.items[mid].word, key);
+        if (c == 0) {
+            *at = mid;
+            return true;
+        }
+        if (c < 0) lo = mid + 1;
+        else hi = mid;
+    }
+    *at = lo;
+    return false;
+}
+
+static bool store_put_key(ProgressStore& store, const char* key, uint8_t box, int32_t due_day) {
+    int at;
+    if (!store_find(store, key, &at)) {
+        if (store.count >= store.capacity) return false;
+        memmove(&store.items[at + 1], &store.items[at], (store.count - at) * sizeof(WordProgress));
+        store.count++;
+        snprintf(store.items[at].word, sizeof(store.items[at].word), "%s", key);
+    }
+    store.items[at].box = box;
+    store.items[at].due_day = due_day;
+    return true;
+}
+
+bool store_put(ProgressStore& store, const char* en, const CardProgress& p) {
+    char key[sizeof(WordProgress::word)];
+    progress_word_key(en, key, sizeof(key));
+    return store_put_key(store, key, p.box, p.due_day);
+}
+
+bool store_parse(const char* json, size_t len, ProgressStore& store) {
+    store.count = 0;
+    store.state = {0, 0};
     if (!json || len == 0) return false;
 
     JsonDocument doc;
     if (deserializeJson(doc, json, len)) return false;
-    state.day = doc["day"] | 0;
-    state.new_today = doc["new_today"] | 0;
-    JsonObjectConst cards = doc["cards"].as<JsonObjectConst>();
-    for (int i = 0; i < deck.count; i++) {
-        JsonObjectConst c = cards[deck.cards[i].key];
-        if (c.isNull()) continue;
-        int box = c["b"] | 1;
-        progress[i].box = (uint8_t)(box < 1 ? 1 : box > LEITNER_BOX_COUNT ? LEITNER_BOX_COUNT : box);
-        progress[i].due_day = c["d"] | 0;
-        progress[i].seen = true;
+    store.state.day = doc["day"] | 0;
+    store.state.new_today = doc["new_today"] | 0;
+    for (JsonPairConst kv : doc["words"].as<JsonObjectConst>()) {
+        char key[sizeof(WordProgress::word)];
+        if (strlen(kv.key().c_str()) >= sizeof(key)) continue;
+        progress_word_key(kv.key().c_str(), key, sizeof(key));
+        int box = kv.value()["b"] | 1;
+        box = box < 1 ? 1 : box > LEITNER_BOX_COUNT ? LEITNER_BOX_COUNT : box;
+        if (!store_put_key(store, key, (uint8_t)box, kv.value()["d"] | 0)) break;
     }
     return true;
 }
 
-// key 最长 31 字节, 一条约 60 字节
-size_t progress_json_capacity(int card_count) { return 64 + (size_t)card_count * 64; }
+void store_load_deck(const ProgressStore& store, const Deck& deck, CardProgress* progress) {
+    char key[sizeof(WordProgress::word)];
+    for (int i = 0; i < deck.count; i++) {
+        progress[i] = {1, 0, false};
+        progress_word_key(deck.cards[i].en, key, sizeof(key));
+        int at;
+        if (store_find(store, key, &at)) progress[i] = {store.items[at].box, store.items[at].due_day, true};
+    }
+}
+
+// 单词最长 47 字节, 转义后最多翻倍, 一条约 130 字节
+size_t store_json_capacity(const ProgressStore& store) { return 64 + (size_t)store.count * 130; }
 
 // 往 out 追加格式化文本; 超出后 n 停在 out_len, 调用方据此判断缓冲不够
 static void append(char* out, size_t out_len, size_t& n, const char* fmt, ...) {
@@ -38,19 +94,38 @@ static void append(char* out, size_t out_len, size_t& n, const char* fmt, ...) {
     n = (w < 0 || (size_t)w >= out_len - n) ? out_len : n + (size_t)w;
 }
 
-size_t progress_serialize(const Deck& deck, const CardProgress* progress, const StudyState& state,
-                          char* out, size_t out_len) {
+size_t store_serialize(const ProgressStore& store, char* out, size_t out_len) {
     size_t n = 0;
-    append(out, out_len, n, "{\"day\":%ld,\"new_today\":%d,\"cards\":{", (long)state.day, state.new_today);
-    bool first = true;
-    for (int i = 0; i < deck.count; i++) {
-        if (!progress[i].seen) continue;
-        append(out, out_len, n, "%s\n\"%s\":{\"b\":%d,\"d\":%ld}", first ? "" : ",", deck.cards[i].key,
-               progress[i].box, (long)progress[i].due_day);
-        first = false;
+    append(out, out_len, n, "{\"day\":%ld,\"new_today\":%d,\"words\":{", (long)store.state.day,
+           store.state.new_today);
+    for (int i = 0; i < store.count; i++) {
+        char esc[2 * sizeof(WordProgress::word)];
+        size_t e = 0;
+        for (const char* c = store.items[i].word; *c; c++) {
+            if (*c == '"' || *c == '\\') esc[e++] = '\\';
+            esc[e++] = *c;
+        }
+        esc[e] = '\0';
+        append(out, out_len, n, "%s\n\"%s\":{\"b\":%d,\"d\":%ld}", i ? "," : "", esc, store.items[i].box,
+               (long)store.items[i].due_day);
     }
     append(out, out_len, n, "}}\n");
     return n < out_len ? n : 0;
+}
+
+int study_unique_words(const Deck& deck, int* idx, int n) {
+    char a[sizeof(WordProgress::word)], b[sizeof(WordProgress::word)];
+    int kept = 0;
+    for (int i = 0; i < n; i++) {
+        progress_word_key(deck.cards[idx[i]].en, a, sizeof(a));
+        bool dup = false;
+        for (int j = 0; j < kept && !dup; j++) {
+            progress_word_key(deck.cards[idx[j]].en, b, sizeof(b));
+            dup = strcmp(a, b) == 0;
+        }
+        if (!dup) idx[kept++] = idx[i];
+    }
+    return kept;
 }
 
 bool study_roll_day(StudyState& state, int32_t today) {

@@ -29,8 +29,12 @@ static const char* TAG = "SPELL_MAIN";
 
 // 状态与数据模型: 词库从 TF 卡加载到 PSRAM
 static Deck s_deck;
-static CardProgress* s_progress = nullptr;   // 按 s_deck.cards 下标, 存于 userdata/progress_<id>.json
-static StudyState s_state;                   // 当日状态 (学习日, 今日新词数), 同存于进度文件
+static CardProgress* s_progress = nullptr;   // 按 s_deck.cards 下标, 加载词库时从全局进度表取
+// 全局进度表: 按单词在各词库间共享, 连同当日状态 (学习日, 今日新词数) 存于 userdata/progress.json
+#define PROGRESS_PATH SPELL_ROOT_DIR "/userdata/progress.json"
+#define PROGRESS_MAX_WORDS 8192
+static ProgressStore s_store = {nullptr, 0, 0, {0, 0}};
+static StudyState& s_state = s_store.state;
 static int* s_candidates = nullptr;          // 当前分类下的卡片下标
 static int s_cand_count = 0;
 static int* s_queue = nullptr;               // 本轮要过的卡片下标 (到期 + 新词, 或"再过一遍全部")
@@ -155,10 +159,6 @@ static void setError(const char* title, const char* detail) {
 static DeckEntry s_decks[MAX_DECKS];
 static int s_deck_count = 0;
 
-static void progressPath(const char* deck_id, char* out, size_t out_len) {
-    snprintf(out, out_len, SPELL_ROOT_DIR "/userdata/progress_%s.json", deck_id);
-}
-
 // 当前学习日; RTC 无效 (未对时/电池耗尽) 时沿用进度文件里上次的学习日, 日期不前进
 static int32_t readToday() {
     LocalDateTime dt;
@@ -175,15 +175,35 @@ static void rebuildQueue(bool review_all) {
     s_current_index = 0;
 }
 
-static void saveProgress() {
-    size_t cap = progress_json_capacity(s_deck.count);
+// 当前卡评分后记入全局进度表并整份写回 TF 卡, 返回耗时 ms
+static uint32_t saveProgress() {
+    uint32_t t0 = millis();
+    if (!store_put(s_store, currentCard().en, currentProgress())) {
+        LOGE("DECK", "进度表已满 (%d 词), %s 未记录", s_store.capacity, currentCard().en);
+    }
+    size_t cap = store_json_capacity(s_store);
     char* buf = (char*)heap_caps_malloc(cap, MALLOC_CAP_SPIRAM);
-    if (!buf) return;
-    size_t n = progress_serialize(s_deck, s_progress, s_state, buf, cap);
-    char path[96];
-    progressPath(s_deck.id, path, sizeof(path));
-    if (!n || !sdcard_write_file(path, buf, n)) LOGE("DECK", "%s 写入失败", path);
+    if (!buf) {
+        LOGE("DECK", "内存不足, 进度未写入");
+        return millis() - t0;
+    }
+    size_t n = store_serialize(s_store, buf, cap);
+    if (!n || !sdcard_write_file(PROGRESS_PATH, buf, n)) LOGE("DECK", "%s 写入失败", PROGRESS_PATH);
     free(buf);
+    return millis() - t0;
+}
+
+// 开机读入全局进度表; 缺失则从空表开始, 损坏则记日志后从空表开始
+static bool loadProgressStore() {
+    s_store.items = (WordProgress*)heap_caps_calloc(PROGRESS_MAX_WORDS, sizeof(WordProgress), MALLOC_CAP_SPIRAM);
+    if (!s_store.items) return false;
+    s_store.capacity = PROGRESS_MAX_WORDS;
+    size_t len = 0;
+    char* buf = sdcard_read_file(PROGRESS_PATH, &len);
+    if (!store_parse(buf, len, s_store) && buf) LOGE("DECK", "%s 损坏, 进度从头开始", PROGRESS_PATH);
+    free(buf);
+    LOGI("DECK", "进度表: %d 个词, 学习日 %ld, 今日新词 %d", s_store.count, (long)s_state.day, s_state.new_today);
+    return true;
 }
 
 // 加载 s_decks[idx] 到新 Deck 并读取它的进度, 成功后替换当前词库。
@@ -220,14 +240,7 @@ static bool loadDeckAt(int idx, const char** title, char* detail, size_t detail_
     if (strcmp(deck.id, e.id) != 0) {
         LOGW("DECK", "%s 内的 id 为 \"%s\", 与 manifest 的 \"%s\" 不一致", e.file, deck.id, e.id);
     }
-
-    StudyState state;
-    progressPath(e.id, path, sizeof(path));
-    buf = sdcard_read_file(path, &len);
-    if (!progress_parse(buf, len, deck, progress, state) && buf) {
-        LOGE("DECK", "%s 损坏, 进度从头开始", path);
-    }
-    free(buf);
+    store_load_deck(s_store, deck, progress);
 
     deck_free(s_deck);
     free(s_candidates);
@@ -237,18 +250,18 @@ static bool loadDeckAt(int idx, const char** title, char* detail, size_t detail_
     s_candidates = cand;
     s_queue = queue;
     s_progress = progress;
-    s_state = state;
-    s_cand_count = deck_filter(s_deck, s_settings.cat_filter, s_candidates);
-    if (s_cand_count == s_deck.count && strcmp(s_settings.cat_filter, "all") != 0) {
+    int filtered = deck_filter(s_deck, s_settings.cat_filter, s_candidates);
+    if (filtered == s_deck.count && strcmp(s_settings.cat_filter, "all") != 0) {
         LOGW("DECK", "分类 %s 无卡片, 显示全部", s_settings.cat_filter);
     }
+    s_cand_count = study_unique_words(s_deck, s_candidates, filtered);  // 重复的词只留第一张
     copy_utf8(s_settings.deck_id, sizeof(s_settings.deck_id), e.id);
     s_ui->setDeckLabel(e.label);
     s_today = readToday();
     study_roll_day(s_state, s_today);
     s_day_pending = false;
     rebuildQueue(false);
-    LOGI("DECK", "已加载 %s (%s): %d 张, 跳过 %d 张, 分类 %s -> %d 张; 学习日 %ld, 今日新词 %d, 本轮 %d 张; PSRAM 剩余 %u KB",
+    LOGI("DECK", "已加载 %s (%s): %d 张, 跳过 %d 张, 分类 %s -> %d 个词; 学习日 %ld, 今日新词 %d, 本轮 %d 张; PSRAM 剩余 %u KB",
                   e.id, s_deck.name, s_deck.count, s_deck.skipped, s_settings.cat_filter, s_cand_count,
                   (long)s_today, s_state.new_today, s_total,
                   (unsigned)(heap_caps_get_free_size(MALLOC_CAP_SPIRAM) / 1024));
@@ -273,6 +286,10 @@ static bool loadDeckAtBoot() {
     free(buf);
     if (s_deck_count == 0) {
         setError("词库读取失败", "decks/manifest.json 缺失或损坏");
+        return false;
+    }
+    if (!loadProgressStore()) {
+        setError("内存不足", "无法分配进度表");
         return false;
     }
     int idx = deck_index(s_decks, s_deck_count, s_settings.deck_id);
@@ -426,10 +443,10 @@ static void handleReviewAction(review_action_t action) {
         case REVIEW_FORGOT: {
             bool remembered = action == REVIEW_REMEMBERED;
             study_grade(currentProgress(), remembered, s_today, s_state);
-            saveProgress();
-            LOGI("REV", "%s %s -> 盒 %d, 学习日 %ld 到期 (%s)", remembered ? "记住了" : "没记住",
+            uint32_t save_ms = saveProgress();
+            LOGI("REV", "%s %s -> 盒 %d, 学习日 %ld 到期 (%s, 写进度 %lu ms)", remembered ? "记住了" : "没记住",
                           currentCard().en, currentProgress().box, (long)currentProgress().due_day,
-                          s_view_state == VIEW_CARD_FRONT ? "正面直接评" : "看过答案");
+                          s_view_state == VIEW_CARD_FRONT ? "正面直接评" : "看过答案", (unsigned long)save_ms);
             advanceCard();
             break;
         }

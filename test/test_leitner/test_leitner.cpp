@@ -105,47 +105,146 @@ void test_build_all_is_permutation() {
     for (int v = 0; v < 6; v++) TEST_ASSERT_TRUE(contains(q, 6, v));
 }
 
-void test_progress_roundtrip() {
-    s_prog[1] = {3, TODAY + 4, true};
-    s_prog[4] = {1, TODAY, true};
-    s_state.new_today = 2;
-    std::string buf(progress_json_capacity(6), '\0');
-    size_t n = progress_serialize(s_deck, s_prog, s_state, &buf[0], buf.size());
-    TEST_ASSERT_TRUE(n > 0);
+// 进度按单词存在全局表里 (userdata/progress.json), 各词库共享
+static WordProgress s_items[8];
+static ProgressStore s_store;
 
-    CardProgress back[6];
-    StudyState st;
-    TEST_ASSERT_TRUE(progress_parse(buf.c_str(), n, s_deck, back, st));
-    TEST_ASSERT_EQUAL(TODAY, st.day);
-    TEST_ASSERT_EQUAL(2, st.new_today);
-    TEST_ASSERT_TRUE(back[1].seen);
-    TEST_ASSERT_EQUAL(3, back[1].box);
-    TEST_ASSERT_EQUAL(TODAY + 4, back[1].due_day);
-    TEST_ASSERT_TRUE(back[4].seen);
-    TEST_ASSERT_FALSE(back[0].seen);
-    TEST_ASSERT_EQUAL(1, back[0].box);
+static void resetStore() {
+    memset(s_items, 0, sizeof(s_items));
+    s_store = {s_items, 0, 8, {TODAY, 0}};
 }
 
-// 损坏/缺失: 全部未学过; 未知 key 忽略; 越界盒子夹到 1..5
-void test_progress_parse_robust() {
+static void setWords(const char* const* words) {
+    for (int i = 0; i < 6; i++) snprintf(s_cards[i].en, sizeof(s_cards[i].en), "%s", words[i]);
+}
+
+void test_word_key_trims_and_lowercases() {
+    char k[48];
+    progress_word_key("  Apple ", k, sizeof(k));
+    TEST_ASSERT_EQUAL_STRING("apple", k);
+    progress_word_key("Good morning!", k, sizeof(k));
+    TEST_ASSERT_EQUAL_STRING("good morning!", k);
+}
+
+void test_store_roundtrip() {
+    resetStore();
+    TEST_ASSERT_TRUE(store_put(s_store, "pear", {3, TODAY + 4, true}));
+    TEST_ASSERT_TRUE(store_put(s_store, "Apple", {1, TODAY, true}));
+    TEST_ASSERT_TRUE(store_put(s_store, "say \"hi\"", {2, TODAY + 1, true}));
+    s_store.state.new_today = 2;
+    std::string buf(store_json_capacity(s_store), '\0');
+    size_t n = store_serialize(s_store, &buf[0], buf.size());
+    TEST_ASSERT_TRUE(n > 0);
+
+    WordProgress items[8];
+    ProgressStore back = {items, 0, 8, {0, 0}};
+    TEST_ASSERT_TRUE(store_parse(buf.c_str(), n, back));
+    TEST_ASSERT_EQUAL(3, back.count);
+    TEST_ASSERT_EQUAL(TODAY, back.state.day);
+    TEST_ASSERT_EQUAL(2, back.state.new_today);
+
+    const char* words[6] = {"apple", "banana", "pear", "say \"hi\"", "kiwi", "APPLE"};
+    setWords(words);
     CardProgress p[6];
-    StudyState st = {99, 9};
-    TEST_ASSERT_FALSE(progress_parse(nullptr, 0, s_deck, p, st));
-    TEST_ASSERT_EQUAL(0, st.day);
-    TEST_ASSERT_FALSE(progress_parse("{bad", 4, s_deck, p, st));
-    for (int i = 0; i < 6; i++) TEST_ASSERT_FALSE(p[i].seen);
-    const char* j = R"({"day":5,"cards":{"no_such_card":{"b":3,"d":1},"d-2":{"b":9,"d":7},"d-3":{"b":0}}})";
-    TEST_ASSERT_TRUE(progress_parse(j, strlen(j), s_deck, p, st));
-    TEST_ASSERT_EQUAL(5, p[2].box);
-    TEST_ASSERT_EQUAL(7, p[2].due_day);
-    TEST_ASSERT_EQUAL(1, p[3].box);
-    TEST_ASSERT_EQUAL(0, st.new_today);
+    store_load_deck(back, s_deck, p);
+    TEST_ASSERT_TRUE(p[0].seen);
+    TEST_ASSERT_EQUAL(1, p[0].box);
+    TEST_ASSERT_FALSE(p[1].seen);
+    TEST_ASSERT_EQUAL(1, p[1].box);
+    TEST_ASSERT_EQUAL(3, p[2].box);
+    TEST_ASSERT_EQUAL(TODAY + 4, p[2].due_day);
+    TEST_ASSERT_EQUAL(2, p[3].box);
+    TEST_ASSERT_TRUE(p[5].seen);  // 大小写不同也是同一个词
+}
+
+// 在一个词库里评过的词, 换到别的词库就是已学过的
+void test_progress_shared_across_decks() {
+    resetStore();
+    const char* a[6] = {"cat", "dog", "pig", "cow", "hen", "fox"};
+    setWords(a);
+    CardProgress pa[6];
+    store_load_deck(s_store, s_deck, pa);
+    study_grade(pa[1], true, TODAY, s_store.state);
+    TEST_ASSERT_TRUE(store_put(s_store, s_cards[1].en, pa[1]));
+
+    const char* b[6] = {"bird", "Dog", "fish", "duck", "goat", "frog"};
+    setWords(b);
+    CardProgress pb[6];
+    store_load_deck(s_store, s_deck, pb);
+    TEST_ASSERT_TRUE(pb[1].seen);
+    TEST_ASSERT_EQUAL(2, pb[1].box);
+    TEST_ASSERT_EQUAL(1, s_store.state.new_today);
+}
+
+// 每日新词上限是全局的: 换词库后不重新给名额
+void test_new_word_limit_is_global() {
+    resetStore();
+    s_store.state.new_today = 9;
+    const char* w[6] = {"a1", "a2", "a3", "a4", "a5", "a6"};
+    setWords(w);
+    CardProgress p[6];
+    store_load_deck(s_store, s_deck, p);
+    int q[6];
+    TEST_ASSERT_EQUAL(1, study_build_queue(p, ALL, 6, TODAY, 10, s_store.state, 1, q));
+}
+
+void test_store_put_updates_existing_and_keeps_order() {
+    resetStore();
+    store_put(s_store, "b", {2, 5, true});
+    store_put(s_store, "a", {1, 3, true});
+    store_put(s_store, "c", {1, 3, true});
+    store_put(s_store, "B", {4, 9, true});
+    TEST_ASSERT_EQUAL(3, s_store.count);
+    TEST_ASSERT_EQUAL_STRING("a", s_store.items[0].word);
+    TEST_ASSERT_EQUAL_STRING("b", s_store.items[1].word);
+    TEST_ASSERT_EQUAL(4, s_store.items[1].box);
+    TEST_ASSERT_EQUAL(9, s_store.items[1].due_day);
+}
+
+void test_store_full_rejects_new_word() {
+    resetStore();
+    char w[8];
+    for (int i = 0; i < 8; i++) {
+        snprintf(w, sizeof(w), "w%d", i);
+        TEST_ASSERT_TRUE(store_put(s_store, w, {1, 0, true}));
+    }
+    TEST_ASSERT_FALSE(store_put(s_store, "extra", {1, 0, true}));
+    TEST_ASSERT_TRUE(store_put(s_store, "w3", {2, 0, true}));  // 已有的词照样能更新
+}
+
+// 损坏/缺失: 空表; 越界盒子夹到 1..5; 超长单词跳过
+void test_store_parse_robust() {
+    resetStore();
+    store_put(s_store, "old", {2, 1, true});
+    TEST_ASSERT_FALSE(store_parse(nullptr, 0, s_store));
+    TEST_ASSERT_EQUAL(0, s_store.count);
+    TEST_ASSERT_EQUAL(0, s_store.state.day);
+    TEST_ASSERT_FALSE(store_parse("{bad", 4, s_store));
+    const char* j = R"({"day":5,"words":{"x":{"b":9,"d":7},"y":{"b":0},"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa":{"b":2}}})";
+    TEST_ASSERT_TRUE(store_parse(j, strlen(j), s_store));
+    TEST_ASSERT_EQUAL(2, s_store.count);
+    TEST_ASSERT_EQUAL(5, s_store.items[0].box);
+    TEST_ASSERT_EQUAL(7, s_store.items[0].due_day);
+    TEST_ASSERT_EQUAL(1, s_store.items[1].box);
+    TEST_ASSERT_EQUAL(0, s_store.state.new_today);
 }
 
 void test_serialize_too_small_buffer() {
-    s_prog[0] = {2, TODAY, true};
+    resetStore();
+    store_put(s_store, "word", {2, TODAY, true});
     char tiny[16];
-    TEST_ASSERT_EQUAL(0, progress_serialize(s_deck, s_prog, s_state, tiny, sizeof(tiny)));
+    TEST_ASSERT_EQUAL(0, store_serialize(s_store, tiny, sizeof(tiny)));
+}
+
+// 同一词库里重复的词只留第一张, 一天只出一次
+void test_unique_words_keeps_first_card() {
+    const char* w[6] = {"note", "pal", "Note", "speed", "pal", "note "};
+    setWords(w);
+    int idx[6] = {0, 1, 2, 3, 4, 5};
+    TEST_ASSERT_EQUAL(3, study_unique_words(s_deck, idx, 6));
+    TEST_ASSERT_EQUAL(0, idx[0]);
+    TEST_ASSERT_EQUAL(1, idx[1]);
+    TEST_ASSERT_EQUAL(3, idx[2]);
 }
 
 void test_counts_for_done_page() {
@@ -165,9 +264,15 @@ int main(int, char**) {
     RUN_TEST(test_queue_respects_new_today_and_unlimited);
     RUN_TEST(test_queue_only_uses_candidates);
     RUN_TEST(test_build_all_is_permutation);
-    RUN_TEST(test_progress_roundtrip);
-    RUN_TEST(test_progress_parse_robust);
+    RUN_TEST(test_word_key_trims_and_lowercases);
+    RUN_TEST(test_store_roundtrip);
+    RUN_TEST(test_progress_shared_across_decks);
+    RUN_TEST(test_new_word_limit_is_global);
+    RUN_TEST(test_store_put_updates_existing_and_keeps_order);
+    RUN_TEST(test_store_full_rejects_new_word);
+    RUN_TEST(test_store_parse_robust);
     RUN_TEST(test_serialize_too_small_buffer);
+    RUN_TEST(test_unique_words_keeps_first_card);
     RUN_TEST(test_counts_for_done_page);
     return UNITY_END();
 }

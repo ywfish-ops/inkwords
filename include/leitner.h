@@ -10,27 +10,53 @@
  * @brief Leitner 5 盒调度与进度文件 (纯逻辑, 可在主机上测试), 规则:
  *        记住了升一盒 (最高盒 5), 没记住回盒 1; 下次到期 = 今天 + LEITNER_BOX_DAYS[盒]。
  *
- * 进度文件 userdata/progress_<deck>.json, 只记学过的卡:
- *   {"day":20746,"new_today":3,"cards":{"spbcn_r1-0":{"b":2,"d":20748}, ...}}
+ * 进度按单词 (去首尾空格、转小写) 在所有词库间共享, 存于 userdata/progress.json, 只记学过的词:
+ *   {"day":20746,"new_today":3,"words":{"apple":{"b":2,"d":20748}, ...}}
+ * 学习日与当日新词数也是全局的, 每日新词上限对所有词库一起算。
  */
 
 // 每日新词上限: 不限
 #define NEW_PER_DAY_UNLIMITED 0
 
-// 每套词库的当日状态
+// 当日状态 (全局)
 struct StudyState {
     int32_t day;        // 最近一次使用的学习日
     int     new_today;  // 该学习日已学的新词数 (第一次评分才算)
 };
 
-// 解析进度文件到 progress[0..deck.count) (按卡片 key 对应); 未记录的卡为盒 1 未学过。
-// json 为空或损坏时全部视为未学过, state 清零, 返回 false
-bool progress_parse(const char* json, size_t len, const Deck& deck, CardProgress* progress, StudyState& state);
+// 单词表里一个词的进度, 按 word 排序
+struct WordProgress {
+    char    word[48];   // 去首尾空格、转小写
+    uint8_t box;
+    int32_t due_day;
+};
 
-// 写成进度文件文本; 缓冲不够返回 0。缓冲大小用 progress_json_capacity 估算
-size_t progress_serialize(const Deck& deck, const CardProgress* progress, const StudyState& state,
-                          char* out, size_t out_len);
-size_t progress_json_capacity(int card_count);
+// 全局进度表: items 由调用方分配 capacity 个
+struct ProgressStore {
+    WordProgress* items;
+    int           count;
+    int           capacity;
+    StudyState    state;
+};
+
+// 单词 -> 进度表的键 (去首尾空格、ASCII 转小写)
+void progress_word_key(const char* en, char* out, size_t out_len);
+
+// 解析进度文件; json 为空或损坏时表清空、state 清零, 返回 false。超过 capacity 的词丢弃
+bool store_parse(const char* json, size_t len, ProgressStore& store);
+
+// 写成进度文件文本; 缓冲不够返回 0。缓冲大小用 store_json_capacity 估算
+size_t store_serialize(const ProgressStore& store, char* out, size_t out_len);
+size_t store_json_capacity(const ProgressStore& store);
+
+// 按每张卡的单词从表里取进度到 progress[0..deck.count); 表里没有的为盒 1 未学过
+void store_load_deck(const ProgressStore& store, const Deck& deck, CardProgress* progress);
+
+// 记下一个词的进度 (已有则更新); 表满且是新词时返回 false
+bool store_put(ProgressStore& store, const char* en, const CardProgress& p);
+
+// 同一词库里重复的词只留第一张: 原地压缩 idx[0..n), 返回剩下的张数
+int study_unique_words(const Deck& deck, int* idx, int n);
 
 // 学习日变了就清零当日新词数; 返回是否换了天
 bool study_roll_day(StudyState& state, int32_t today);
