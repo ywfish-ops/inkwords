@@ -113,12 +113,9 @@ static void updateDisplay(bool force_full_refresh = false) {
     s_ui->setDirection(s_settings.dir);
     s_ui->setClockWarning(!s_rtc_valid && s_view_state != VIEW_ERROR);
 
-    // 统计各盒子卡片数
-    int box_counts[6] = {0};
-    for (int i = 0; i < s_cand_count; i++) {
-        uint8_t b = s_progress[s_candidates[i]].box;
-        if (b >= 1 && b <= 5) box_counts[b]++;
-    }
+    // 统计各盒子卡片数 ([0] 为未学)
+    int box_counts[6];
+    study_count_boxes(s_progress, s_candidates, s_cand_count, box_counts);
 
     // 防御性边界约束
     if (s_current_index < 0) s_current_index = 0;

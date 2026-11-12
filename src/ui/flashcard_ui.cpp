@@ -309,11 +309,12 @@ void FlashcardUI::renderDone(int total_cards, const int box_counts[6], int tomor
 
     _canvas.drawStringCentered(213, "◆ Leitner 5 盒进阶分布 ◆", Font20, true);
 
-    // 绘制 5 盒统计柱状条
-    int cur_y = 265;
-    for (int i = 1; i <= 5; i++) {
+    // 绘制 未学 + 5 盒统计柱状条
+    int cur_y = 255;
+    for (int i = 0; i <= 5; i++) {
         char label[16];
-        snprintf(label, sizeof(label), "盒 %d", i);
+        if (i == 0) snprintf(label, sizeof(label), "未学");
+        else snprintf(label, sizeof(label), "盒 %d", i);
         _canvas.drawString(50, cur_y, label, Font24, true);
 
         // 统计条背景框 (长 200, 高 18)
@@ -340,7 +341,7 @@ void FlashcardUI::renderDone(int total_cards, const int box_counts[6], int tomor
         }
         _canvas.drawString(bar_x + bar_w + 12, cur_y, count_str, Font24, true);
 
-        cur_y += 54;
+        cur_y += 48;
     }
 
     _canvas.drawDottedHLine(50, 560, UI_WIDTH - 100, 6, true);

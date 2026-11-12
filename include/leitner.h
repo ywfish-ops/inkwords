@@ -72,6 +72,8 @@ int study_build_queue(const CardProgress* progress, const int* candidates, int n
 // 完成页统计: candidates 中到 day 为止到期的已学卡数 / 还没学过的卡数
 int study_count_due(const CardProgress* progress, const int* candidates, int n, int32_t day);
 int study_count_unseen(const CardProgress* progress, const int* candidates, int n);
+// 完成页盒子分布: counts[0] 为没学过的卡, counts[1..5] 为已学卡所在盒子
+void study_count_boxes(const CardProgress* progress, const int* candidates, int n, int counts[6]);
 
 // "再过一遍全部词": candidates 全部打乱
 int study_build_all(const int* candidates, int n, uint32_t seed, int* out);

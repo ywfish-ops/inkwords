@@ -200,3 +200,12 @@ int study_count_unseen(const CardProgress* progress, const int* candidates, int 
     for (int i = 0; i < n; i++) c += !progress[candidates[i]].seen;
     return c;
 }
+
+void study_count_boxes(const CardProgress* progress, const int* candidates, int n, int counts[6]) {
+    memset(counts, 0, 6 * sizeof(int));
+    for (int i = 0; i < n; i++) {
+        const CardProgress& p = progress[candidates[i]];
+        if (!p.seen) counts[0]++;
+        else if (p.box >= 1 && p.box <= 5) counts[p.box]++;
+    }
+}

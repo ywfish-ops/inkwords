@@ -255,6 +255,21 @@ void test_counts_for_done_page() {
     TEST_ASSERT_EQUAL(3, study_count_unseen(s_prog, ALL, 6));
 }
 
+// 完成页盒子分布: 没学过的卡 (默认 box 1) 单独计入 [0], 不算进盒 1
+void test_box_counts_keep_unseen_out_of_box1() {
+    s_prog[0] = {1, TODAY, true};
+    s_prog[1] = {2, TODAY + 1, true};
+    s_prog[2] = {5, TODAY + 14, true};
+    int counts[6];
+    study_count_boxes(s_prog, ALL, 6, counts);
+    TEST_ASSERT_EQUAL(3, counts[0]);
+    TEST_ASSERT_EQUAL(1, counts[1]);
+    TEST_ASSERT_EQUAL(1, counts[2]);
+    TEST_ASSERT_EQUAL(0, counts[3]);
+    TEST_ASSERT_EQUAL(0, counts[4]);
+    TEST_ASSERT_EQUAL(1, counts[5]);
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_grade_moves_box_and_due);
@@ -274,5 +289,6 @@ int main(int, char**) {
     RUN_TEST(test_serialize_too_small_buffer);
     RUN_TEST(test_unique_words_keeps_first_card);
     RUN_TEST(test_counts_for_done_page);
+    RUN_TEST(test_box_counts_keep_unseen_out_of_box1);
     return UNITY_END();
 }

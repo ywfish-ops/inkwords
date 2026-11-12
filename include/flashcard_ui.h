@@ -35,7 +35,7 @@ public:
     // 渲染卡片背面 (揭晓答案: 英文、音标、中文释义、英文定义、例句、评定操作条)
     void renderBack(const WordCard& card, const CardProgress& prog, int card_idx, int total_cards);
 
-    // 渲染今日完成页: 盒子分布, 以及明天到期的复习卡数 / 可学的新词数
+    // 渲染今日完成页: 盒子分布 (box_counts[0] 为未学, [1..5] 为各盒), 以及明天到期的复习卡数 / 可学的新词数
     void renderDone(int total_cards, const int box_counts[6], int tomorrow_due, int tomorrow_new);
 
     // RTC 未对时: 页面底部提示在设置里设时间
